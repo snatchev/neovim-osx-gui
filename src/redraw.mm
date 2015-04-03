@@ -12,7 +12,7 @@
 #import "view.h"
 #import "graphics.h"
 
-static const bool debug = false;
+static const bool debug = true;
 
 #define RGBA(r,g,b,a) [NSColor colorWithCalibratedRed:r/255.f green:g/255.f blue:b/255.f alpha:a/255.f]
 #define NSColorFromRGB(rgbValue) [NSColor colorWithCalibratedRed:((float)((rgbValue & 0xFF0000) >> 16))/255.0 green:((float)((rgbValue & 0xFF00) >> 8))/255.0 blue:((float)(rgbValue & 0xFF))/255.0 alpha:1.0]
@@ -21,17 +21,17 @@ using msgpack::object;
 
 @implementation VimView (Redraw)
 
+- (int) bufferLocation
+{
+  return(mCursorPos.y * mXCells + mCursorPos.x);
+}
+
 - (void) redraw:(const msgpack::object &)update_o
 {
     bool didAnything = false;
 
     [mTextAttrs setValue:mFont forKey:NSFontAttributeName];
-
-    [NSGraphicsContext saveGraphicsState];
-
-    [NSGraphicsContext setCurrentContext:[NSGraphicsContext
-        graphicsContextWithGraphicsPort:(void *)mCanvasContext
-        flipped:NO]];
+    [self.textStorage beginEditing];
 
     try
     {
@@ -70,14 +70,15 @@ using msgpack::object;
         std::exit(-1);
     }
 
-    [NSGraphicsContext restoreGraphicsState];
-
     if (didAnything) {
         if (debug) std::cout << "--\n";
         [self setNeedsDisplay:YES];
     }
     else
         if (debug) std::cout << "..\n";
+
+
+    [self.textStorage endEditing];
 }
 
 - (void) doAction:(RedrawCode::Enum)code withItem:(const object &)item_o
@@ -85,7 +86,6 @@ using msgpack::object;
     int item_sz = item_o.via.array.size;
     object *arglists = item_o.via.array.ptr + 1;
     int narglists = item_sz - 1;
-
 
     if (code == RedrawCode::put) {
         static std::string run;
@@ -100,15 +100,11 @@ using msgpack::object;
         }
 
         NSString *nsrun = [NSString stringWithUTF8String:run.c_str()];
+        int size = [nsrun length];
+        [self.textStorage replaceCharactersInRange: NSMakeRange([self bufferLocation], size)
+                                   withAttributedString: [[NSAttributedString alloc] initWithString: nsrun attributes:mTextAttrs]];
 
-        int sz = [nsrun length];
-
-        NSRect cellRect = CGRectMake(mCursorPos.x, mCursorPos.y, sz, 1);
-        NSRect rect = [self viewRectFromCellRect:cellRect];
-
-        [nsrun drawAtPoint:rect.origin withAttributes:mTextAttrs];
-
-        mCursorPos.x += sz;
+        mCursorPos.x += size;
     }
     else for (int i=0; i<narglists; i++) {
         const object &arglist = arglists[i];
@@ -183,6 +179,8 @@ using msgpack::object;
 
         case RedrawCode::eol_clear:
         {
+            [self.textStorage replaceCharactersInRange: NSMakeRange([self bufferLocation], 1) withString:@"\n"];
+
             NSRect rect;
             rect.origin.x = mCursorPos.x * mCharSize.width;
             rect.origin.y = viewFrame.size.height - (mCursorPos.y + 1) * mCharSize.height;
@@ -229,11 +227,11 @@ using msgpack::object;
            offset and clipped. */
         case RedrawCode::scroll:
         {
+            /*
             int amt = argv[0].convert();
 
             NSRect destInPoints = [self viewRectFromCellRect:mCellScrollRect];
 
-            CGSize sizeInPoints = bitmapContextSizeInPoints(self, mCanvasContext);
             NSRect totalRect = {CGPointZero, sizeInPoints};
 
             totalRect.origin.y += amt * mCharSize.height;
@@ -256,6 +254,7 @@ using msgpack::object;
             }
 
             break;
+            */
         }
 
         case RedrawCode::resize:

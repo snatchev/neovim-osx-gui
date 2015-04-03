@@ -9,6 +9,11 @@
 
 @implementation VimView
 
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+};
+
 - (id)initWithFrame:(NSRect)frame vim:(Vim *)vim
 {
     if (self = [super initWithFrame:frame]) {
@@ -20,32 +25,6 @@
         mBackgroundColor = [[NSColor whiteColor] retain];
         mForegroundColor = [[NSColor blackColor] retain];
         mWaitAck = 0;
-
-        /* Pick a color space, and store it as a property so we can set the
-           window's color space to be the same one, improving draw speed. */
-        mColorSpace = CGColorSpaceCreateWithName(
-            kCGColorSpaceGenericRGB
-        );
-
-        /* A CGBitmapContext is basically a mutable buffer of bytes in a given
-           image format, that can be drawn into. It sort of conflates the ideas
-           of an image and a context. */
-        mCanvasContext = CGBitmapContextCreate(
-            0, // ask CG to allocate a buffer for us
-            sizeInPixels.width,
-            sizeInPixels.height,
-            8, // bitsPerComponent
-            0, // bytesPerRow (use default)
-            mColorSpace,
-            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host
-        );
-        assert (mCanvasContext);
-
-        /* CGContext measures everything in pixels. If we want to auto-scale the
-           stuff we draw into it to take Retina displays into account (which we
-           do!) then we need to set a scaling factor ourselves: */
-        float scale = [[NSScreen mainScreen] backingScaleFactor];
-        CGContextScaleCTM(mCanvasContext, scale, scale);
 
         /* Load font from saved settings */
         NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
@@ -67,6 +46,8 @@
 
         mCursorPos = mCursorDisplayPos = CGPointZero;
         mCursorOn = true;
+
+        self.editable = NO;
     }
 
     return self;
@@ -74,11 +55,15 @@
 
 - (id)initWithCellSize:(CGSize)cellSize vim:(Vim *)vim
 {
-    NSRect frame = CGRectMake(0, 0, 100, 100);
+    NSRect frame = CGRectMake(0, 0, 800, 600);
 
     if (self = [self initWithFrame:frame vim:vim]) {
         frame.size = [self viewSizeFromCellSize:cellSize];
         [self setFrame:frame];
+        int length = cellSize.width * cellSize.height;
+        [self.textStorage.mutableString setString:[[NSString string] stringByPaddingToLength:length withString:@" " startingAtIndex:0]];
+        [self.textStorage setAttributes:mTextAttrs range:NSMakeRange(0,length)];
+        self.textStorage.delegate = self;
     }
     return self;
 }
@@ -159,6 +144,8 @@
 
 /*  When drawing, it's important that our canvas image is in the same color
     space as the destination, otherwise drawing will be very slow. */
+
+/*
 - (void)viewDidMoveToWindow
 {
     NSColorSpace *nsColorSpace =
@@ -166,57 +153,7 @@
 
     [[self window] setColorSpace:nsColorSpace];
 }
-
-- (void)drawRect:(NSRect)rect
-{
-    CGSize sizeInPoints = bitmapContextSizeInPoints(self, mCanvasContext);
-
-    NSGraphicsContext *gc = [NSGraphicsContext currentContext];
-    CGContextRef cg = (CGContextRef)[gc graphicsPort];
-
-    NSRect totalRect;
-    totalRect.origin = CGPointZero;
-    totalRect.size = sizeInPoints;
-
-    drawBitmapContext(cg, mCanvasContext, totalRect);
-
-    [self drawCursor];
-}
-
-- (void)drawCursor
-{
-    NSRect cellRect;
-
-    float x = mCursorDisplayPos.x;
-    float y = mCursorDisplayPos.y;
-
-    /* Difference, which can invert, is only present in the 10.10 SDK, so
-       use the ugly cursor if the person compiling doesn't have that SDK.
-       This is all going away anyway once we get a character buffer. */
-    #if MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_10
-
-        if (mInsertMode || y + 1 == mYCells)
-            cellRect = CGRectMake(x, y, .2, 1);
-        else
-            cellRect = CGRectMake(x, y, 1, 1);
-
-        NSRect viewRect = [self viewRectFromCellRect:cellRect];
-        [[NSColor whiteColor] set];
-        NSRectFillUsingOperation(viewRect, NSCompositeDifference);
-
-    #else
-
-        if (mInsertMode || y + 1 == mYCells)
-            cellRect = CGRectMake(x, y, .2, 1);
-        else
-            cellRect = CGRectMake(x, y+1, 1, .3);
-
-        NSRect viewRect = [self viewRectFromCellRect:cellRect];
-        [mForegroundColor set];
-        NSRectFill(viewRect);
-
-    #endif
-}
+*/
 
 
 /* -- Resizing -- */

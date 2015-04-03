@@ -3,14 +3,12 @@
 
 class Vim;
 
-@class NSImage;
+@class NSTextView;
 
-@interface VimView : NSView {
+@interface VimView : NSTextView <NSTextViewDelegate, NSTextStorageDelegate> {
     Vim *mVim;
 
-    CGContextRef mCanvasContext;
-    CGColorSpaceRef mColorSpace;
-
+    //NSTextView *mTextView;
     int mXCells;
     int mYCells;
     bool mInsertMode;
